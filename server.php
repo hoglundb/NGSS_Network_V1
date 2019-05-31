@@ -2,10 +2,9 @@
    include 'DBConnection.php';
 if(isset($_POST['scode']) && $_POST['scode'] != ''){
   $networkDepth = 2;
-  if(isset($_POST['networkDepth']) && $_POST['networkDepth'] == 1){
-    $networkDepth = 1;
-  }
-  #example s-codes S2454349, S2468136, S2454554
+    if(isset($_POST['networkDepth']) && $_POST['networkDepth'] == 1){
+      $networkDepth = 1;
+    }
 	$networkData = BuildNetwork($_POST['scode'], $networkDepth);
 	print($networkData);
 }

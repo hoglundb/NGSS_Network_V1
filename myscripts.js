@@ -1,16 +1,49 @@
-
 //Submits the search form if enter key is pressed
 document.onkeyup = enter;
 function enter(e){
   if(e.which == 13)
 	submit();
 	else e.preventDefault
+/*  $('#myModal').on('shown.bs.modal', function () {
+    $('#myInput').trigger('focus')
+  })*/
 }
 
 window.onload = function(){
   input = document.getElementById("sCode");
   input.value = "S2454554"
 }
+
+
+var modal = document.getElementById("myModal");
+
+// Get the button that opens the modal
+var btn = document.getElementById("myBtn");
+
+// Get the <span> element that closes the modal
+var span = document.getElementsByClassName("close")[0];
+
+// When the user clicks the button, open the modal
+function showModal(modalContent) {
+  document.getElementById("myModal").style.display = "block"
+ document.getElementById("modalInnerHtml").innerHTML = modalContent
+}
+
+function closeModal(){
+
+    document.getElementById("myModal").style.display = "none"
+}
+
+// When the user clicks anywhere outside of the modal, close it
+window.onclick = function(event) {
+
+console.log(event.target.id)
+if(event.target.id == "myModal"){
+  document.getElementById("myModal").style.display = "none";
+}
+  //   document.getElementById("myModal").style.display = "none"
+}
+
 
 //Object to hold all the nodes for the vis.js dataset
 var nodes;
@@ -54,6 +87,14 @@ function submit(){
 
 
 function checkBoxSubmit(){
+  var docsLabel = document.getElementById("alignedDocsLabel");
+  if(document.getElementById("myCheckBox").checked){
+    docsLabel.style.display = "inline";
+  }
+  else {
+    docsLabel.style.display = "none";
+  }
+
   sCode = document.getElementById("currentNodeScode").value;
   SubmitTableClick(sCode);
 }
@@ -288,8 +329,11 @@ function CreateMap(data){
   nodes = new vis.DataSet(options);
   for(i = 0; i < network[0].length; i++){
     if(network[0][i].nodeType != "Document")
+
 		nodes.add({id:network[0][i].id, title: FormatNodeDescriptionForPopup(network[0][i].des), color:network[0][i].color, label:network[0][i].sCode, font: {color:'black', size:REGULAR_NODE_SIZE}});
-    else if(i < 100 && isChecked == true) nodes.add({id:network[0][i].id, color:network[0][i].color, label:"Document"});
+    else if(i < 100 && isChecked == true) {
+      nodes.add({id:network[0][i].id, color:network[0][i].color, label:"Document", docId:network[0][i].document});
+    }
 	}
 
   //Create the edge list
@@ -335,16 +379,23 @@ function CreateMap(data){
   //Register click handler for nodes
 	nw.on( 'click', function(properties) {
 		if(properties.nodes.length > 0 ){
-	//		console.log(properties)
 			var ids = properties.nodes;
 	    var clickedNodes = nodes.get(ids);
+        console.log(clickedNodes);
       if(clickedNodes[0].label != "Document"){
 			var scode = clickedNodes[0].label;
       var id = clickedNodes[0].id;
 			var nodesList = nodes.get(nodes._data);
-			HighlightNode(id)
+			HighlightNode(id);
 			SetTableRowColor(document.getElementById('t1'), scode, clickedNodes[0].color);
+      document.getElementById(scode).scrollIntoView();
+      BuildAlignedDocumentsTable(scode);
     }
+    else{
+      //if document node was clicked. Calls show modal content
+      GetDocumentMetadata(clickedNodes[0].docId)
+    }
+
 		}
 	});
   nw.on('hoverNode',function(params) {
@@ -481,4 +532,25 @@ function SubmitDoubleClick(scode){
 		}
 	}
 	req.send(params);
+}
+
+function GetDocumentMetadata(docId){
+  var req = new XMLHttpRequest();
+  var url = "GetDocumentDataAPI.php";
+  var params = "docId=" + docId;
+
+  req.open("POST", url, true);
+	req.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+  req.onload = function(){
+    if(req.status == 200){
+      response = JSON.parse(req.responseText);
+      console.log(JSON.parse(req.responseText));
+      var modalContent = '<div style="width:90%;margin-left:5%;">' + '<div><i>' +response.title+ '</i></div>'
+      modalContent += '<div>' + response.summary +  '</div>'
+      modalContent += '<a href=' +  response.TEURI+'>' + 'View On teachengineering.org' +  '</a>' + '</div>'
+
+      showModal(modalContent)
+    }
+  }
+  req.send(params);
 }
