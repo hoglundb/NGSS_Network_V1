@@ -1,0 +1,43 @@
+
+#mynetwork {
+      width: 98%;
+      height: 700px;
+      border: 1px solid lightgray;
+      margin-left: 3% !important;
+      margin-right: 1% !important;
+      float:left;
+}
+body{
+
+}
+/*.nopadding {
+   padding: 0 !important;
+   margin: 0 !important;
+}*/
+
+.t1{
+  float:right;
+}
+
+#label{
+width:20px;
+height:20px;
+}
+
+#labelText{
+margin-right: 17px;
+margin-left: 5px;
+margin-bottom: 5px;
+}
+
+#legend{
+margin-left:3%;
+}
+
+.clickableTableCell:hover{
+background-color: lightBlue;
+}
+
+tr td{
+
+}
