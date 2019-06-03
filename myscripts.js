@@ -139,12 +139,11 @@ function BuildAlignedDocumentsTable(sCode){
   req.send(params);
 }
 
-
 function _CreateDocumentsTable(sCode, documents){
     var tableRef = document.getElementById('t2');
     ClearTable(tableRef);
 
-    document.getElementById("t2Title").innerHTML = "Aligned Documents";
+    document.getElementById("t2Title").innerHTML = "<div style='margin-bottom:8px'>Aligned Documents</div>";
 
     for(var i = 0; i < documents.length; i++){
       var newRow = tableRef.insertRow(tableRef.rows.length);
@@ -152,8 +151,7 @@ function _CreateDocumentsTable(sCode, documents){
       newRow.style.background = documents[i].std_color;
       newRow.innerHTML =
       '<div style = "line-height:'+DOCS_LINE_HEIGHT+'">' + '</div>' +
-      '<span style ="color:blue; cursor: pointer; letterSpacing:20px" onclick = GoToTEPage(\'' + documents[i].url + '\')>' +documents[i].doc_id + '</span>'  + '<br>'
-      + '<span> <i>' + documents[i].title +  ' </i><span>' + '<br>'
+      '<span style ="color:blue; cursor: pointer; letterSpacing:20px" onclick = GoToTEPage(\'' + documents[i].url + '\')>' +documents[i].title + '</span>'  + '<br>'
       + '<span>' + _TruncateDocDescription(documents[i].summary, documents[i].doc_id) + '</span>' +
       '<hr style= margin:3px>'
     }
@@ -395,7 +393,8 @@ function CreateMap(data){
       //if document node was clicked. Calls show modal content
       GetDocumentMetadata(clickedNodes[0].docId)
     }
-
+    //document.getElementById("submitButton").scrollIntoView();
+    window.scrollTo(0,0)
 		}
 	});
   nw.on('hoverNode',function(params) {
@@ -503,6 +502,7 @@ ClearTable(document.getElementById('t1'));
 		if(req.status == 200){
 				ClearTable(document.getElementById('t1'));
 			  CreateMap(req.responseText);
+        window.scrollTo(0,0)
         //	curRow.style.backgroundColor = network[0][0].color
 
 		//	CreateTable(req.responseText);
@@ -545,10 +545,8 @@ function GetDocumentMetadata(docId){
     if(req.status == 200){
       response = JSON.parse(req.responseText);
       console.log(JSON.parse(req.responseText));
-      var modalContent = '<div style="width:90%;margin-left:5%;">' + '<div><i>' +response.title+ '</i></div>'
-      modalContent += '<div>' + response.summary +  '</div>'
-      modalContent += '<a href=' +  response.TEURI+'>' + 'View On teachengineering.org' +  '</a>' + '</div>'
-
+      var modalContent = '<div style="width:90%;margin-left:5%;">' + '<a href='+response.TEURI+' style="font-size:12pt"><i>' +response.title+ '</i></a>'
+      modalContent += '<div style = "font-size:14px">' + response.summary +  '</div>'
       showModal(modalContent)
     }
   }

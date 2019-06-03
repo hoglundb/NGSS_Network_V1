@@ -5,7 +5,6 @@
 <!DOCTYPE html>
 <html>
         <head>
-
           <!-- The Modal -->
           <div id="myModal" class="modal">
             <!-- Modal content -->
@@ -36,43 +35,34 @@
               </select> <span style = "font-size:11pt">Depth</span>
               </label>
             </div>
-          <!--   <div class='row' id='legend' style="font-size:10pt">
-                 <div id='label'  style="background:#EFB2F2"></div> <div  id='labelText'> Topics</div>
-                   <div id='label' style="background:lightGrey"></div> <div  id='labelText' > Perf Exp</div>
-                  <div id='label'  style="background:lightBlue"></div> <div  id='labelText'> Science & Engr Prac</div>
-                    <div id='label'  style="background:orange"></div> <div  id='labelText'> Discp Core Ideas</div>
-                    <div id='label' style="background:lightGreen"></div> <div  id='labelText' > Cross Concepts</div>
-                    <div id='label' style="background:yellow"></div> <div  id='labelText' > Aligned Docs</div><br>
-              </div>-->
               <div id="mynetwork" ></div>
-             <div class="myLegend">
+             <div class="myLegend" style="width:225px">
                <div style = "margin-bottom:2px">
-                  <div id='label'  style="background:lightGrey; float:left"> </div> <div  id='labelText' style = "float:left; margin-left:5px "> Perf Exp</div> <br>
+                  <div id='label'  style="background:#EFB2F2; float:left"> </div> <div  id='labelText' style = "float:left; margin-left:5px "> Topics</div> <br>
+               </div>
+               <div style = "margin-bottom:2px">
+                  <div id='label'  style="background:lightGrey; float:left"> </div> <div  id='labelText' style = "float:left; margin-left:5px "> Performance Expectations</div> <br>
                </div>
                 <div style = "margin-bottom:3px">
-                  <div id='label'  style="background:lightBlue; float:left"> </div> <div  id='labelText' style = "float:left; margin-left:5px;"> Science & Engr Prac</div> <br>
+                  <div id='label'  style="background:lightBlue; float:left"> </div> <div  id='labelText' style = "float:left; margin-left:5px;"> Science & Enginering Practices</div> <br>
                 </div>
                   <div style = "margin-bottom:3px">
-                  <div id='label'  style="background:orange; float:left"> </div> <div id='labelText' style = "float:left; margin-left:5px"> Disp Core Ideas</div> <br>
+                  <div id='label'  style="background:orange; float:left"> </div> <div id='labelText' style = "float:left; margin-left:5px"> Disiplinary Core Ideas</div> <br>
                 </div>
                   <div style = "margin-bottom:3px">
-                    <div id='label'  style="background:lightGreen; float:left"> </div> <div  id='labelText' style = "float:left; margin-left:5px"> Cross Concepts</div> <br>
+                    <div id='label'  style="background:lightGreen; float:left"> </div> <div  id='labelText' style = "float:left; margin-left:5px"> Cross Cutting Concepts</div> <br>
                   </div>
                     <div id = "alignedDocsLabel" style = "display:none">
-                      <div id='label'  style="background:yellow; float:left"> </div> <div  id='labelText' style = "float:left; margin-left:5px"> Aligned Docs</div> <br>
+                      <div id='label'  style="background:yellow; float:left"> </div> <div  id='labelText' style = "float:left; margin-left:5px"> Aligned Documentss</div> <br>
                     </div>
                  </div>
-              <!-- <div class="myLegend">
 
-                    <div id='label'  style="background:lightBlue; float:left"> </div> <div  id='labelText' style = "float:left; margin-left:5px;"> Science & Engr Prac</div> <br>
-
-                 </div>--><br>
             </div>
 
             <div class="stdTable" style=" margin-top:1%; margin-left:1% ;padding-right:0%; padding-left:0%;width:18%; " >
-           <span>Standards</span>
+           <span style ="font-size:10pt; font-weight:bold">Standards</span>
            <div style = "height:700px; overflow-y:auto;">
-           <table class="table" style="width:100%; height:800px;  font-size:10pt"  id = "t1">
+           <table class="table" style="width:100%;  font-size:10pt"  id = "t1">
          <thead>
          <tr>
          <th scope="col" style="width:100%; padding:0px"></th>
@@ -86,7 +76,7 @@
        </div>
          </div>
             <div class="docsTable" style="margin-top:1% ;padding-right:0%; margin-left:1%; width:18%">
-              <table class="table" style="width:100%; font-size:10pt; table-layout: fixed"  id = "t2">
+              <table class="table" style="line-height: 1.2 ;width:100%; font-size:10pt; table-layout: fixed"  id = "t2">
                 <tr>
                 <th scope="col" style="padding:0px"><div id=t2Title></div></th>
 
