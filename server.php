@@ -1,5 +1,20 @@
 <?php
-   include 'DBConnection.php';
+include 'DBConnection.php';
+
+//Color definitions
+define("GREEN_COLOR", "#CDE49F");
+define("ORANGE_COLOR", "#FBC08C");
+define("BLUE_COLOR", "#9FBDE4");
+define("DOC_COLOR","#DFD4C8");
+define("TOPIC_COLOR", "#EFB2F2");
+
+//Standards definitions and abreveations
+define("PE", "Performance Expectation");
+define("TOPIC", "Standard");
+define("DCI", "Disciplinary Core Ideas");
+define("SEP", "Science and Engineering Practices");
+define("CC", "Crosscutting Concepts");
+
 if(isset($_POST['scode']) && $_POST['scode'] != ''){
   $networkDepth = 2;
     if(isset($_POST['networkDepth']) && $_POST['networkDepth'] == 1){
@@ -9,173 +24,202 @@ if(isset($_POST['scode']) && $_POST['scode'] != ''){
 	print($networkData);
 }
 
-//BuildNetwork('S2454554');
-
-
+//BuildNetwork('S2454554', 2);
 function BuildNetwork($sCode, $networkDepth){
-  	$result = array();
 
-    //Establish database connection
-    $dbConnection = GetDBConnection();
-    //Array to hold all of the nodes
-  	$nodeList = array();
+  //Get the connection to the prod_edu_standards_db database
+  $dbConnection = GetDBConnection();
 
-    //Add the first node
-    $newNode = new StandardNode($sCode,  _GetIdFromScode($sCode, $dbConnection));
-    array_push($nodeList, $newNode);
+  $postArray = array(); //holds the results that get posted to the client
 
-    //Add all the  neighbors of the first node and add the nodes to the array
-    $neighborScodes = _GetNeighborNodeSCodes(_GetIdFromScode($sCode, $dbConnection), $dbConnection);
-    foreach($neighborScodes as $neighborScode){
-      $newNode = new StandardNode($neighborScode, _GetIdFromScode($neighborScode, $dbConnection));
-      array_push($nodeList, $newNode);
-    }
+  //The edge list node Objects. This is the required vis.js format
+  $nodeList = array();
+  $edgeList = array();
+  $sCodesHashMap = array(); //Used as hash table when checking if a node is in the graph
+  $edgesHashMap = array();
 
-    //Add all neighbors of neighbors to the nodes array. Make sure to aviod duplicates
-    if($networkDepth == 2){
-      foreach($nodeList as $currentNode){
-          $neighborsOfNeighbors = _GetNeighborNodeSCodes(_GetIdFromScode($currentNode->getSCode(), $dbConnection), $dbConnection);
-          foreach ($neighborsOfNeighbors as $potentialNodeToAdd) {
-            if(_ContainsNode($nodeList, $potentialNodeToAdd) == false){
-                $newNeighborOfNeighbor = new StandardNode($potentialNodeToAdd, _GetIdFromScode($potentialNodeToAdd, $dbConnection));
-                array_push($nodeList, $newNeighborOfNeighbor);
-            }
+  //Get the s-code if user submitted p-code
+  if($sCode[0] != 'S') {
+    $sCode = GetPCodeFromSCode($dbConnection, $sCode);
+  }
+
+  //Get the network one step from the root node
+  GetNodesOneLevelDeep($dbConnection, $sCode, $edgeList, $nodeList, $sCodesHashMap, $edgesHashMap);
+
+  if($networkDepth == 2){
+    GetNodesTwoLevelsDeep($dbConnection, $sCode, $edgeList, $nodeList, $sCodesHashMap, $edgesHashMap);
+  }
+
+  //Get the metadata for each node in the network.
+  for($i = 0; $i < count($nodeList); $i++){
+    GetStandardNodeMetadata($nodeList[$i], $dbConnection);
+  }
+
+  GetAlignedDocuments($dbConnection, $edgeList, $nodeList, $edgesHashMap);
+
+
+  //print_r($nodeList);
+  //print_r($edgeList);
+  //print_r($sCodesHashMap);
+  array_push($postArray, $nodeList);
+  array_push($postArray, $edgeList);
+  return json_encode($postArray);
+}
+
+
+//Gets the aligned documents and adds them to the network
+function GetAlignedDocuments($dbConnection, & $edgeList, & $nodeList, & $edgesHashMap){
+  $docNodesInNetwork = array();
+    //For each node n in the nw
+        //Get all the documents d aligned with n
+        //For each document d
+            //if d not in network
+                //add d to network
+            //add a connection from n to d
+    $docIdStart = 10001;
+    for($i = 0; $i < count($nodeList); $i++){
+      $curStd = $nodeList[$i]->sCode;
+      $query = "SELECT doc_id FROM bh_std_ngss_alignments WHERE sCode = '".$curStd."'";
+      if($res = mysqli_query($dbConnection, $query)){
+        while($row = $res->fetch_assoc()){
+
+          //Add a connection from the document to the node
+          $newEdge = new Edge($docIdStart, $nodeList[$i]->id);
+          array_push($edgeList, $newEdge);
+
+         //If document node not in network, create new doc node
+         if(!array_key_exists($row['doc_id'], $docNodesInNetwork)){
+           $newDoc = _CreateNewDocumentNode($row['doc_id'], $docIdStart);
+           array_push($nodeList, $newDoc);
+           $docIdStart++;
+           $docNodesInNetwork[$row['doc_id']] = $row['doc_id'];
+         }
         }
       }
     }
+}
 
-    foreach ($nodeList as $node) {
-    _GetMetadataForNode($node, $dbConnection);
+
+//Returns a DocumentNode object with its metadata
+function _CreateNewDocumentNode($docId, $id){
+
+  $docNode = new DocumentNode();
+  $docNode->id = $id;
+  $docNode->document = $docId;
+  $docNode->nodeType = "Document";
+  $docNode->color = DOC_COLOR;
+
+
+  return $docNode;
+}
+
+//Gets the network one level deep and puts the resuls in $edgeList and $nodeList
+function GetNodesOneLevelDeep($dbConnection, $sCode, & $edgeList, & $nodeList, & $sCodesHashMap, & $edgesHashMap){
+
+  //Get the root node that was searched by
+  $rootNodeId = _GetIdFromScode($sCode, $dbConnection);
+  $rootNode = new StandardNode($sCode, $rootNodeId, 0);
+  $sCodesHashMap[$rootNodeId] = $rootNodeId;
+  array_push($nodeList, $rootNode);
+
+  //Get all nodes one step from the root node. Add the corrisponding edges.
+  $query = "SELECT * FROM bh_ngss_network_map WHERE node_id = '".$rootNodeId."'";
+  if($res = mysqli_query($dbConnection, $query)){
+    while($row = $res->fetch_assoc()){
+      $childNode = new StandardNode(null, $row['mapped_id'], 1);
+      $sCodesHashMap[$row['mapped_id']] = $row['mapped_id'];
+      $newEdge = new Edge($rootNodeId, $row['mapped_id']);
+      array_push($edgeList, $newEdge);
+      array_push($nodeList, $childNode);
+
+      $e1 = $row['mapped_id'] . '&' . $row['node_id'];
+      $e2 = $row['node_id'] . '&' . $row['mapped_id'];
+      $edgesHashMap[$e1] = $e1;
+      $edgesHashMap[$e2] = $e2;
+    }
   }
+  return $nodeList;
+}
 
-  //For each node, add its edges to other nodes in the list
-  $edges = array();
-  foreach ($nodeList as $node) {
-    foreach ($nodeList as $possibleNeighborNode) {
-      if(_HasConnection($node->getNodeId(), $possibleNeighborNode->getNodeId(), $dbConnection) && _HasEdge($edges, $node->getNodeId(), $possibleNeighborNode->getNodeId()) == false){
-         $newEdge = new Edge($node->getNodeId(), $possibleNeighborNode->getNodeId());
-         array_push($edges, $newEdge);
+
+//Gets the nodes two steps away from the root node and addes them to the network. Also adds the edges
+function GetNodesTwoLevelsDeep($dbConnection, $sCode, & $edgeList, & $nodeList, & $nodeIdsHashMap, & $edgesHashMap){
+  //temp array store the level 2 arrays to be added to the node list
+  $level2Nodes = array();
+
+
+  //For every node in the network
+  for($i = 1; $i < count($nodeList); $i++){
+    if($nodeList[$i]->level == 0) continue;
+    //Query the nodes connected to node i
+    $curId = $nodeList[$i]->id;
+    $query = "SELECT node_id, mapped_id FROM bh_ngss_network_map WHERE node_id = '".$curId."'";
+    if($res = mysqli_query($dbConnection, $query)){
+      while($row = $res->fetch_assoc()){
+        //If level 2 neighbor not in network, add new node. Also add to the edge list
+         if(!ContainsNode($row['mapped_id'], $nodeIdsHashMap)){
+           $newNode = new StandardNode(null, $row['mapped_id'], 2);
+           array_push($level2Nodes, $newNode);
+           $nodeIdsHashMap[$row['mapped_id']] = $row['mapped_id'];
+         }
+         //Add the connection from node i to the new node we just created, but check for duplicates first
+         $e1 = $row['mapped_id'] . '&' . $row['node_id'];
+         $e2 = $row['node_id'] . '&' . $row['mapped_id'];
+
+         if(!array_key_exists($e1, $edgesHashMap) && !array_key_exists($e2, $edgesHashMap)){
+              $newEdge = new Edge($curId, $row['mapped_id']);
+              array_push($edgeList, $newEdge);
+         }
+         $edgesHashMap[$e1] = $e1;
+         $edgesHashMap[$e2] = $e2;
+
       }
     }
   }
 
-  //Get the document nodes
-  _GetDocumentNodes($nodeList, $edges, $dbConnection);
+  //Add the level 2 nodes to the nodes array
+  for($i = 0; $i < count($level2Nodes); $i++){
+      array_push($nodeList, $level2Nodes[$i]);
+  }
 
-
-
-//  print_r($edges);
-   //print_r($nodeList);
-	array_push($result, $nodeList, $edges);
-  //$test = array();
-	//array_push($test, 1);
-	$testArray = json_encode($result);
-  //print($testArray);
-//	echo json_last_error_msg();
-	//echo "\n";
-	//die();
-
-	return $testArray;
+  //Check if any level 2 nodes have connections with other level 2 nodes.
+  for($i = 0; $i < count($nodeList); $i++){
+     if($nodeList[$i]->level == 2){
+       for($j = 0; $j < count($nodeList); $j++){
+         if($nodeList[$j]->level == 2 && $nodeList[$j]->id != $nodeList[$i]->id){
+           if(_IsNeighboringNode($dbConnection, $nodeList[$i]->id, $nodeList[$j]->id)){
+            //Add new edge to the edge list, but make sure a duplicate edge is not being added.
+            $newEdge = new Edge($nodeList[$i]->id, $nodeList[$j]->id);
+            $e1 = $nodeList[$i]->id . '&' . $nodeList[$j];
+            $e2 = $nodeList[$j]->id . '&' . $nodeList[$i];
+            if(!array_key_exists($e1, $edgesHashMap) && !array_key_exists($e2, $edgesHashMap)){
+              array_push($edgeList, $newEdge);
+              $edgesHashMap[$e1] = $e1;
+              $edgesHashMap[$e2] = $e2;
+            }
+           }
+         }
+     }
+   }
+  }
 }
 
 
-
-
-function _GetDocumentNodes(& $nodeList,& $edges, $dbConnection){
-	$documentNodes = array();
- //Get unique list of documents connecting to PE's in the current graph
- $documents = array();
- foreach ($nodeList as $currentNode) {
-	 if($currentNode->nodeType == 'Performance Expectation'){
-			$documents = GetAlignmentsForPE($currentNode, $documents, $dbConnection);
-	 }
- }
-
- //Build the document nodes
- $nodeId = 10000;
- $newNodeColor = "yellow";
- $newNodeType = "Document";
- foreach ($documents as $doc) {
- 	  $newNode = new DocumentNode($nodeId, $newNodeType , $newNodeColor);
-		$newNode->setDocument($doc);
-		$nodeId = $nodeId + 1;
-    array_push($documentNodes, $newNode);
-		array_push($nodeList, $newNode);
- }
-
- //Add adge between every document and alligned PE
- foreach ($documentNodes as $docNode) {
-	 //print_r($docNode);
- 	  $allignedStandards = _GetAllignedStandardsForDocument($docNode->getNodeDocumentName(), $dbConnection);
-		foreach ($allignedStandards as $alignmentScode) {
-			$newEdge = new Edge($docNode->getNodeId(), _GetIdFromScode($alignmentScode, $dbConnection));
-			array_push($edges, $newEdge);
-		}
- }
-  //print_r($edges);
- //print_r($documentNodes);
- //print_r($documents);
-}
-
-
-
-function _GetAllignedStandardsForDocument($document, $dbConnection){
-	$allignedStandards = array();
-
-	$query = "SELECT sCode FROM bh_std_ngss_alignments WHERE doc_id like '%".$document."%'";
-	if($res = mysqli_query($dbConnection, $query)){
-			while($row = $res->fetch_assoc()){
-				if(in_array($row["sCode"], $allignedStandards) == false){
-								array_push($allignedStandards, $row["sCode"]);
-				}
-			}
-		}
-		return $allignedStandards;
-}
-
-
-function GetAlignmentsForPE($node, $documents, $dbConnection){
-		$query = "SELECT doc_id FROM bh_std_ngss_alignments WHERE sCode = '".$node->sCode."'";
-		if($res = mysqli_query($dbConnection, $query)){
-				while($row = $res->fetch_assoc()){
-					if(in_array($row["doc_id"], $documents) == false){
-								  array_push($documents, $row["doc_id"]);
-					}
-				}
-		}
-		return $documents;
-}
-
-//Returns true if that edge is already in the Edge object. Used to make sure that no
-//duplicate edges are added
-function _HasEdge($edges, $id1, $id2){
-
-	foreach ($edges as $edge) {
-		if(($edge->id1 == $id1 && $edge->id2 == $id2) || ($edge->id1 == $id2 && $edge->id2 == $id1)){
-			return true;
-		}
-	}
-	return false;
-}
-
-
-//Takes the id's of two nodes and returns true if their is an edge between them
-function _HasConnection($nodeId1, $nodeId2, $dbConnection){
-     $queryConnectedNodes = "SELECT mapped_id FROM bh_ngss_network_map WHERE node_id = '" . $nodeId1 . "'";
-		 if($res = mysqli_query($dbConnection, $queryConnectedNodes)){
-				 while($row = $res->fetch_assoc()){
-					 if($nodeId2 == $row["mapped_id"]){
-						 return true;
-					 }
-				 }
-		 }
-		 return false;
-}
+//Queries the db and returns true if the two nodes given are neighbors
+  function _IsNeighboringNode($dbConnection, $id1, $id2){
+    $query = "SELECT * FROM bh_ngss_network_map WHERE node_id = '".$id1."' AND mapped_id = '".$id2."' or node_id = '".$id2."' AND mapped_id = '".$id1."'  ";
+    if($res = mysqli_query($dbConnection, $query)){
+      if($row = $res->fetch_assoc()){
+          return true;
+      }
+    }
+    return false;
+  }
 
 
 //Queries the db by s-code and returns the node id
 function _GetIdFromScode($sCode, $dbConnection){
-        $queryNodeId = "SELECT id from bh_ngss_network_nodes WHERE s_code = '". $sCode . "'";
+        $queryNodeId = "SELECT id from bh_ngss_network_nodes2 WHERE sCode = '". $sCode . "'";
         if($res = mysqli_query($dbConnection, $queryNodeId)){
                 $item = $res->fetch_assoc();
                 $nodeId = $item["id"];
@@ -185,110 +229,78 @@ function _GetIdFromScode($sCode, $dbConnection){
 }
 
 
-//Returns an array of sCodes that are neighbors to the node
-function _GetNeighborNodeSCodes($sCode, $dbConnection){
-
-	$neighborScodes = array();
-
-	$queryRootNeighbors = "SELECT mapped_id FROM bh_ngss_network_map WHERE node_id = '" . $sCode . "'";
-	if($res = mysqli_query($dbConnection, $queryRootNeighbors)){
-
-      //Get all the negibors of the node
-			while($row = $res->fetch_assoc()){
-				array_push($neighborScodes, _GetScodeFromId($row["mapped_id"], $dbConnection));
-			}
-	}
-  return $neighborScodes;
+//Gets all the data pertaining to the standard, including sCode, color, gradeband, description...etc
+function GetStandardNodeMetadata(& $nodeObj, $dbConnection){
+    $query = "SELECT id, std_type, description, lowgrade, highgrade, sCode FROM bh_ngss_network_nodes2 WHERE id = '".$nodeObj->id."'";
+    if($res = mysqli_query($dbConnection, $query)){
+      if($row = $res->fetch_assoc()){
+        $nodeObj->sCode = $row['sCode'];
+        $nodeObj->nodeType = _SetStandardType($row['std_type'], $row['sCode'], $dbConnection);
+        $nodeObj->gradeBand = _SetStandardGradeBand($row['lowgrade'], $row['highgrade']);
+        $nodeObj->color = _SetNodeColor($nodeObj->nodeType);
+        $nodeObj->des = iconv("UTF-8", "UTF-8//IGNORE", $row['description']);
+        $nodeObj->pCode = _GetPCode($row['sCode'], $dbConnection);
+      }
+    }
 }
 
 
-//Queries the db by node id and returns the s-code
-function _GetScodeFromId($id, $dbConnection){
-	$queryNodeId = "SELECT s_code from bh_ngss_network_nodes WHERE id = ". $id;
-	if($res = mysqli_query($dbConnection, $queryNodeId)){
-					$item = $res->fetch_assoc();
-					$sCode = $item["s_code"];
-					return $sCode;
-	}
-	else print("Error retriving sCode from bh_ngss_network_nodes");
+//Returns true if the current network contains this node
+function ContainsNode($nodeId, & $sCodeList){
+   if(array_key_exists($nodeId, $sCodeList)){
+     return true;
+   }
+   return false;
 }
 
 
-#searches the array for a node with that sCode. Returns true if node is already in the list
-function _ContainsNode($nodeList, $sCode){
+//Returns the corrisponding pCode for the standard with the given sCode
+function _GetPCode($sCode, $dbConnection){
+  $queryNGSS = "SELECT pCode FROM bh_ngss_uri_mappings WHERE  sCode = '" . $sCode . "'";
+  if($res = mysqli_query($dbConnection, $queryNGSS)){
+    if($row=$res->fetch_assoc()){
+      return $row["pCode"];
+    }
+    return "error1";
+  }
+  return "error2";
+}
 
-	foreach ($nodeList as $currentNode) {
-		if($currentNode->GetSCode() == $sCode){
-			return true;
-		}
-	}
-	return false;
+//Returns the color for the node
+function _SetNodeColor($nodeType){
+  if($nodeType == 'Performance Expectation') return 'lightGrey';
+  else if($nodeType == "Science and Engineering Practices") return BLUE_COLOR;
+  else if($nodeType == "Crosscutting Concepts") return GREEN_COLOR;
+  else if($nodeType == "Disciplinary Core Ideas") return ORANGE_COLOR;
+  else if($nodeType == "Standard") return TOPIC_COLOR;
 }
 
 
-function _GetMetadataForNode($node, $dbConnection){
-
-	 $node->setDescription(iconv("UTF-8", "UTF-8//IGNORE", _GetNodeDescription($node->GetSCode(), $dbConnection)));
-	 $node->setNodeType(_GetNodeType($node->getSCode(), $dbConnection));
-	 $node->setNodeColor(_GetNodeColor($node->getNodeType()));
-	 $node->setGradeBand(_GetNodeGradeBand($node->getSCode(), $dbConnection));
+//Returns the formatted grade band from highgrade and lowgrade
+function _SetStandardGradeBand($low, $high){
+  $lowGrade = strval($low);
+  if($lowGrade == "0") $lowGrade = "k";
+  $highGrade = strval($high);
+  if($highGrade == "0") $highGrade = "k";
+  return $lowGrade . "-" . $highGrade;
 }
 
 
-
-function _GetNodeType($sCode, $dbConnection){
-	$queryType = "SELECT std_type FROM bh_ngss_network_nodes WHERE s_code = '" . $sCode . "'";
-	if($res = mysqli_query($dbConnection, $queryType)){
-			if($row = $res->fetch_assoc()){
-				$type =  $row["std_type"];
-				if($type == 'parent') return 'Standard';
-				else if($type == 'child') return 'Performance Expectation';
-				else if($type == '3d') return _Get3dStandardCategory($sCode, $dbConnection);
-			}
-			else return "could not get node type";
-	}
-	else return "error";
+//Sets the standard type: PE, DCI, etc...
+function _SetStandardType($type, $sCode, $dbConnection){
+  if($type == "parent"){
+    return "Standard";
+  }
+  if($type == "child"){
+    return "Performance Expectation";
+  }
+  else {
+    return  _Get3dStandardCategory($sCode, $dbConnection);
+  }
 }
 
 
-//Returns the grade band for the standard with the given s code
-function _GetNodeGradeBand($sCode, $dbConnection){
-	$queryDescription = "SELECT highgrade, lowgrade FROM std_list WHERE id = '" . $sCode . "'";
-	if($res = mysqli_query($dbConnection, $queryDescription)){
-			if($row = $res->fetch_assoc()){
-				$lowGrade = strval($row["lowgrade"]);
-				if($lowGrade == "0") $lowGrade = "k";
-				$highGrade = strval($row["highgrade"]);
-				if($highGrade == "0") $highGrade = "k";
-				return $lowGrade . "-" . $highGrade;
-			}
-			else return "Description could not be found";
-	}
-}
-
-
-function _GetNodeColor($nodeType){
-	  if($nodeType == "Standard") return "#EFB2F2";
-		else if($nodeType == "Performance Expectation") return "lightGrey";
-		else if($nodeType == "Science and Engineering Practices") return "lightBlue";
-		else if($nodeType == "Crosscutting Concepts") return "lightGreen";
-		else if($nodeType == "Disciplinary Core Ideas") return "orange";
-}
-
-
-function _GetNodeDescription($sCode, $dbConnection){
-	$queryDescription = "SELECT description FROM std_list WHERE id = '" . $sCode . "'";
-
-	if($res = mysqli_query($dbConnection, $queryDescription)){
-			if($row = $res->fetch_assoc()){
-				return $row["description"];
-			}
-			else return "Description could not be found";
-	}
-
-}
-
-
+//Helper function for _SetStandardType()
 function _Get3dStandardCategory($sCode, $dbConnection){
 	$query3dType = "SELECT category FROM bh_NGSS_3D WHERE edu_std = '" . $sCode . "'";
 	if($res = mysqli_query($dbConnection, $query3dType)){
@@ -299,97 +311,64 @@ function _Get3dStandardCategory($sCode, $dbConnection){
 				else if($category == "DCI") return "Disciplinary Core Ideas";
 				else return "Error: 3d category not found";
 			}
-			else return "Error";
+			else return "Error1";
 	}
-	else return "Error";
+	else return "Error2";
+}
+
+//Function takes an NGSS p-code and querries for the corrisponding ASN s-code
+function GetPCodeFromSCode($dbConnection, $sCode){
+  $query = "SELECT sCode FROM bh_ngss_uri_mappings WHERE pCode = '".$sCode."'";
+  if($res = mysqli_query($dbConnection, $query)){
+    if($row = $res->fetch_assoc()){
+        if($row["sCode"]){
+                return $row["sCode"];
+        }
+      }
+    }
+    else return null;
 }
 
 
-abstract class Node{
-   public $id;
-   public $nodeType;
-   public $color;
-
-   public function __construct($id){
-      $this->id = $id;
-   }
-
-   public function getNodeType(){
-     return $this->nodeType;
-   }
-
-   public function setNodeType($nodeType){
-     $this->nodeType = $nodeType;
-   }
-
-   public function setNodeColor($color){
-     $this->color = $color;
-   }
-
-   public function getNodeId(){
-     return $this->id;
-   }
-}
-
-
-class StandardNode extends Node {
-  public $sCode;
-  public $des;
-  public $gradeBand;
-
-
-  public function __construct($sCode, $id){
-    $this->sCode = $sCode;
-		$this->id = $id;
-  }
-
-  public function setDes($des){
-     $this->des = $des;
-		 JSON.stringify($this->des);
-  }
-
-  public function setGradeBand($gradeBand){
-    $this->gradeBand = $gradeBand;
-  }
-
-  public function setDescription($des){
-    $this->des = $des;
-  }
-
-  public function getSCode(){
-    return $this->sCode;
-  }
-}
-
-class DocumentNode extends Node{
-  public $document;
-
-  public function __construct($id, $nodeType, $color){
-		$this->id = $id;
-		$this->nodeType = $nodeType;
-		$this->color = $color;
-  }
-
-  public function setDocument($document){
-		$this->document = $document;
-		//JSON.stringify($this->document);
-	}
-
-	public function getNodeDocumentName(){
-		return $this->document;
-	}
-
+class Node{
+  public $nodeType;
+  public $id;
+  public $color;
 }
 
 
 class Edge{
-	public $id1;
-	public $id2;
+  public $id1;
+  public $id2;
 
-		public function __construct($id1, $id2){
-			$this->id1 = $id1;
-			$this->id2 = $id2;
-		}
+  public function __construct($id1, $id2){
+      $this->id1 = $id1;
+      $this->id2 = $id2;
+  }
 }
 
+
+class StandardNode extends Node{
+  public $sCode;
+  public $pCode;
+  public $des;
+  public $gradeBand;
+  public $level;
+  public function __construct($sCode, $id, $level){
+    $this->sCode = $sCode;
+    $this->id = $id;
+    $this->level = $level;
+  }
+}
+
+
+class DocumentNode extends Node{
+  public $document;
+  public $NGSSCode;
+  public function __construct($id, $nodeType, $color){
+    $this->id = $id;
+    $this->nodeType = $nodeType;
+    $this->color = $color;
+  }
+}
 ?>
